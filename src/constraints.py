@@ -19,6 +19,17 @@ class Phase(Enum):
     DONE = auto()
 
 
+PREFIX_TEXT = '{"name": "'
+AFTER_NAME_TEXT = '", "parameters": {'
+SUFFIX_TEXT = "}}"
+
+_LITERALS = {
+    Phase.PREFIX: PREFIX_TEXT,
+    Phase.AFTER_NAME: AFTER_NAME_TEXT,
+    Phase.SUFFIX: SUFFIX_TEXT,
+}
+
+
 class FunctionCallConstraint:
     """Tracks which characters keep the output on a valid path."""
 
@@ -43,6 +54,12 @@ class FunctionCallConstraint:
         self._chosen: FunctionDefinition | None = None
         self._param_index = 0
         self._prev_was_backslash = False
+        self._literal_pos = 0
+
+    def _enter(self, phase: Phase) -> None:
+        """Move to a new phase and reset the per-literal cursor."""
+        self._phase = phase
+        self._literal_pos = 0
 
     def allowed_next(self) -> set[str]:
         """Return the set of characters legal as the next character.
@@ -51,6 +68,9 @@ class FunctionCallConstraint:
             A set of single-character strings. Empty only when the
             machine is complete (nothing more may be emitted).
         """
+        if self._phase in _LITERALS:
+            literal = _LITERALS[self._phase]
+            return {literal[self._literal_pos]}
         return set()
 
     def advance(self, char: str) -> None:
@@ -63,7 +83,25 @@ class FunctionCallConstraint:
         Raises:
             ValueError: If ``char`` is not currently allowed.
         """
+        if char not in self.allowed_next():
+            raise ValueError(
+                f"character {char!r} not allowed in phase "
+                f"{self._phase.name}"
+            )
         self._output += char
+        if self._phase in _LITERALS:
+            self._literal_pos += 1
+            if self._literal_pos >= len(_LITERALS[self._phase]):
+                self._on_literal_complete()
+
+    def _on_literal_complete(self) -> None:
+        """Transition out of a fixed literal once fully emitted."""
+        if self._phase is Phase.PREFIX:
+            self._enter(Phase.NAME)
+        elif self._phase is Phase.AFTER_NAME:
+            self._enter(Phase.PARAM_KEY)
+        elif self._phase is Phase.SUFFIX:
+            self._enter(Phase.DONE)
 
     def is_complete(self) -> bool:
         """Return whether a full, valid function call has been emitted.
