@@ -41,9 +41,9 @@ class FunctionCallConstraint:
         """Initialise the machine for one prompt.
 
         Args:
-            functions: The available function definitions. The name of
-                each is a candidate; the chosen one's parameters drive
-                the value phases.
+            functions: The available function definitions. Each name is
+                a candidate; the chosen one's parameters drive the
+                value phases.
 
         Raises:
             ValueError: If no functions are available.
@@ -62,6 +62,7 @@ class FunctionCallConstraint:
         self._name_so_far = ""
         self._key_text = ""
         self._number_so_far = ""
+        self._string_opened = False
 
     def _enter(self, phase: Phase) -> None:
         """Move to a new phase and reset the per-literal cursor."""
@@ -115,6 +116,14 @@ class FunctionCallConstraint:
             chars.add(self._number_terminator())
         return chars
 
+    def _string_next_chars(self) -> set[str]:
+        """Return chars legal at the current point of a string value."""
+        if not self._string_opened:
+            return {'"'}
+        if self._prev_was_backslash:
+            return set('"\\/bfnrt')
+        return {chr(c) for c in range(0x20, 0x7F)}
+
     def _function_by_name(self, name: str) -> FunctionDefinition:
         """Return the definition matching an exact function name."""
         for fn in self._functions:
@@ -138,6 +147,8 @@ class FunctionCallConstraint:
             return {self._key_text[self._literal_pos]}
         if self._phase is Phase.VALUE_NUMBER:
             return self._number_next_chars()
+        if self._phase is Phase.VALUE_STRING:
+            return self._string_next_chars()
         return set()
 
     def advance(self, char: str) -> None:
@@ -166,6 +177,8 @@ class FunctionCallConstraint:
             self._advance_param_key()
         elif self._phase is Phase.VALUE_NUMBER:
             self._advance_number(char)
+        elif self._phase is Phase.VALUE_STRING:
+            self._advance_string(char)
 
     def is_complete(self) -> bool:
         """Return whether a full, valid function call has been emitted.
@@ -203,6 +216,8 @@ class FunctionCallConstraint:
                 self._number_so_far = ""
             else:
                 self._enter(Phase.VALUE_STRING)
+                self._string_opened = False
+                self._prev_was_backslash = False
 
     def _advance_number(self, char: str) -> None:
         """Build the number, or finish it on the terminator.
@@ -222,6 +237,30 @@ class FunctionCallConstraint:
         else:
             self._enter(Phase.SUFFIX)
         self.advance(char)
+
+    def _advance_string(self, char: str) -> None:
+        """Walk a JSON string value, tracking escapes.
+
+        A closing quote ends the string unless it follows an unescaped
+        backslash. The string owns its closing quote, so on close we go
+        straight to the following separator or suffix.
+        """
+        self._output += char
+        if not self._string_opened:
+            self._string_opened = True
+            return
+        if self._prev_was_backslash:
+            self._prev_was_backslash = False
+            return
+        if char == "\\":
+            self._prev_was_backslash = True
+            return
+        if char == '"':
+            self._string_opened = False
+            if self._more_params():
+                self._enter(Phase.SEPARATOR)
+            else:
+                self._enter(Phase.SUFFIX)
 
     def _on_literal_complete(self) -> None:
         """Transition out of a fixed literal once fully emitted."""
