@@ -32,6 +32,19 @@ _LITERALS = {
 }
 
 DIGITS = set("0123456789")
+PRINTABLE = frozenset(chr(c) for c in range(0x20, 0x7F))
+_Snapshot = tuple[
+    Phase,
+    str,
+    "FunctionDefinition | None",
+    int,
+    bool,
+    int,
+    str,
+    str,
+    str,
+    bool,
+]
 
 
 class FunctionCallConstraint:
@@ -122,7 +135,7 @@ class FunctionCallConstraint:
             return {'"'}
         if self._prev_was_backslash:
             return set('"\\/bfnrt')
-        return {chr(c) for c in range(0x20, 0x7F)}
+        return set(PRINTABLE)
 
     def _function_by_name(self, name: str) -> FunctionDefinition:
         """Return the definition matching an exact function name."""
@@ -130,6 +143,61 @@ class FunctionCallConstraint:
             if fn.name == name:
                 return fn
         raise ValueError(f"unknown function name: {name}")
+
+    def _snapshot(self) -> _Snapshot:
+        """Capture all mutable state so it can be restored."""
+        return (
+            self._phase,
+            self._output,
+            self._chosen,
+            self._param_index,
+            self._prev_was_backslash,
+            self._literal_pos,
+            self._name_so_far,
+            self._key_text,
+            self._number_so_far,
+            self._string_opened,
+        )
+
+    def _restore(self, snap: _Snapshot) -> None:
+        """Restore mutable state from a snapshot."""
+        (
+            self._phase,
+            self._output,
+            self._chosen,
+            self._param_index,
+            self._prev_was_backslash,
+            self._literal_pos,
+            self._name_so_far,
+            self._key_text,
+            self._number_so_far,
+            self._string_opened,
+        ) = snap
+
+    def accepts(self, text: str) -> bool:
+        """Whether ``text`` could be emitted now, leaving state intact.
+
+        Simulates advancing through every character of ``text`` from the
+        current state, then restores the state. Usef by the decoder to
+        test whole tokens without committing to them.
+
+        Args:
+            text: The candidate token's decoded string.
+
+        Returns:
+            ``True`` if every character is legal in sequence.
+        """
+        if text == "":
+            return False
+        snap = self._snapshot()
+        try:
+            for ch in text:
+                if ch not in self.allowed_next():
+                    return False
+                self.advance(ch)
+            return True
+        finally:
+            self._restore(snap)
 
     def allowed_next(self) -> set[str]:
         """Return the set of characters legal as the next character.
