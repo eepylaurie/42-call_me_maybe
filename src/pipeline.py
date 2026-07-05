@@ -44,3 +44,28 @@ def generate_function_call(
         for name, spec in chosen.parameters.items()
     }
     return FunctionCall(prompt=prompt, name=chosen.name, parameters=params)
+
+
+def build_prompt(prompt: str, functions: list[FunctionDefinition]) -> str:
+    """Build the steering prompt shown to the model.
+
+    Constrained decoding guarantees valid structure regardless; this
+    text only steers *which* function and values the model prefers, by
+    listing the request and the available functions.
+
+    Args:
+        prompt: The user's natural-language request.
+        functions: The available function definitions.
+
+    Returns:
+        The full prompt string to encode and feed the model.
+    """
+    lines = [
+        "You convert requests into function calls.",
+        "Available functions:",
+    ]
+    for fn in functions:
+        lines.append(f"- {fn.name}: {fn.description}")
+    lines.append(f'Request: "{prompt}"')
+    lines.append("Output:")
+    return "\n".join(lines)
