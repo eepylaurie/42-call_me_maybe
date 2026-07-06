@@ -1,19 +1,17 @@
 """Generation pipeline."""
 
 from __future__ import annotations
+import json
+from collections.abc import Sequence
 from typing import Any
+from llm_sdk import Small_LLM_Model  # type: ignore
+from .decoder import ConstrainedDecoder
 from .models import FunctionCall, FunctionDefinition
+from .vocabulary import Vocabulary
 
 
 def _placeholder_value(type_name: str) -> Any:
-    """Return a type-appropriate placeholder for a parameter.
-
-    Args:
-        type_name: JSON type name from the schema.
-
-    Returns:
-        ``0`` for numbers, ``False`` for booleans, ``""`` otherwise.
-    """
+    """Return a type-appropriate placeholder for a parameter."""
     if type_name == "number":
         return 0
     if type_name == "boolean":
@@ -24,18 +22,7 @@ def _placeholder_value(type_name: str) -> Any:
 def generate_function_call(
     prompt: str, functions: list[FunctionDefinition]
 ) -> FunctionCall:
-    """Produce a structured function call for a single prompt.
-
-    Args:
-        prompt: The natural-language request.
-        functions: The available function definitions.
-
-    Returns:
-        A :class:`FunctionCall` for ``prompt``.
-
-    Raises:
-        ValueError: If no function definitions are available.
-    """
+    """Produce a structured function call for a single prompt."""
     if not functions:
         raise ValueError("No function definitions were provided.")
     chosen = functions[0]
@@ -47,19 +34,7 @@ def generate_function_call(
 
 
 def build_prompt(prompt: str, functions: list[FunctionDefinition]) -> str:
-    """Build the steering prompt shown to the model.
-
-    Constrained decoding guarantees valid structure regardless; this
-    text only steers *which* function and values the model prefers, by
-    listing the request and the available functions.
-
-    Args:
-        prompt: The user's natural-language request.
-        functions: The available function definitions.
-
-    Returns:
-        The full prompt string to encode and feed the model.
-    """
+    """Build the steering prompt shown to the model."""
     lines = [
         "You convert requests into function calls.",
         "Available functions:",
@@ -69,3 +44,49 @@ def build_prompt(prompt: str, functions: list[FunctionDefinition]) -> str:
     lines.append(f'Request: "{prompt}"')
     lines.append("Output:")
     return "\n".join(lines)
+
+
+class Pipeline:
+    """Load the model once and generate function calls per prompt."""
+
+    def __init__(self, functions: list[FunctionDefinition]) -> None:
+        """Load the model and build the constrained decoder.
+
+        Args:
+            functions: The available function definitions.
+
+        Raises:
+            ValueError: If no function definitions are available.
+        """
+        if not functions:
+            raise ValueError("No function definitions were provided.")
+        self._functions = functions
+        self._model = Small_LLM_Model()
+        self._vocab = Vocabulary(self._model.get_path_to_vocab_file())
+        self._decoder = ConstrainedDecoder(
+            functions, self._vocab, self._logits, self._encode
+        )
+
+    def _encode(self, text: str) -> list[int]:
+        """Encode prompt text into a flat list of token ids."""
+        return list(self._model.encode(text).tolist()[0])
+
+    def _logits(self, ids: list[int]) -> Sequence[float]:
+        """Return next-token logits for a token-id context."""
+        return list(self._model.get_logits_from_input_ids(ids))
+
+    def run(self, prompt: str) -> FunctionCall:
+        """Generate the function call for one prompt.
+
+        Args:
+            prompt: The natural-language request.
+
+        Returns:
+            A schema-valid :class:`FunctionCall`.
+        """
+        text = build_prompt(prompt, self._functions)
+        raw = self._decoder.decode(text)
+        data = json.loads(raw)
+        return FunctionCall(
+            prompt=prompt, name=data["name"], parameters=data["parameters"]
+        )
