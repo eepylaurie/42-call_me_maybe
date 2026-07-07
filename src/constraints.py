@@ -178,7 +178,7 @@ class FunctionCallConstraint:
         """Whether ``text`` could be emitted now, leaving state intact.
 
         Simulates advancing through every character of ``text`` from the
-        current state, then restores the state. Usef by the decoder to
+        current state, then restores the state. Used by the decoder to
         test whole tokens without committing to them.
 
         Args:
