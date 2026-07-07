@@ -10,7 +10,7 @@ from .io_utils import (
     load_test_prompts,
     write_json,
 )
-from .pipeline import generate_function_call
+from .pipeline import Pipeline
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -31,10 +31,16 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
+    try:
+        pipeline = Pipeline(functions)
+    except Exception as exc:
+        print(f"error: could not initialise pipeline: {exc}", file=sys.stderr)
+        return 1
+
     results: list[dict[str, Any]] = []
     for entry in prompts:
         try:
-            call = generate_function_call(entry.prompt, functions)
+            call = pipeline.run(entry.prompt)
             results.append(call.model_dump())
         except Exception as exc:
             print(

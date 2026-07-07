@@ -3,34 +3,10 @@
 from __future__ import annotations
 import json
 from collections.abc import Sequence
-from typing import Any
 from llm_sdk import Small_LLM_Model  # type: ignore
 from .decoder import ConstrainedDecoder
 from .models import FunctionCall, FunctionDefinition
 from .vocabulary import Vocabulary
-
-
-def _placeholder_value(type_name: str) -> Any:
-    """Return a type-appropriate placeholder for a parameter."""
-    if type_name == "number":
-        return 0
-    if type_name == "boolean":
-        return False
-    return ""
-
-
-def generate_function_call(
-    prompt: str, functions: list[FunctionDefinition]
-) -> FunctionCall:
-    """Produce a structured function call for a single prompt."""
-    if not functions:
-        raise ValueError("No function definitions were provided.")
-    chosen = functions[0]
-    params = {
-        name: _placeholder_value(spec.type)
-        for name, spec in chosen.parameters.items()
-    }
-    return FunctionCall(prompt=prompt, name=chosen.name, parameters=params)
 
 
 def build_prompt(prompt: str, functions: list[FunctionDefinition]) -> str:
