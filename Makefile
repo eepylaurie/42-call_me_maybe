@@ -1,24 +1,33 @@
+ifneq ($(wildcard /goinfre/$(USER)),)
+UV_ENV := UV_CACHE_DIR=/goinfre/$(USER)/uv-cache \
+	HF_HOME=/goinfre/$(USER)/hf-cache \
+	UV_PROJECT_ENVIRONMENT=/goinfre/$(USER)/call_me_maybe-venv \
+	UV_LINK_MODE=copy
+else
+UV_ENV :=
+endif
+
 .PHONY: install run debug clean lint lint-strict
 
 install:
-	uv sync
+	$(UV_ENV) uv sync
 
 run:
-	uv run python -m src
+	$(UV_ENV) uv run python -m src
 
 debug:
-	uv run python -m pdb -m src
+	$(UV_ENV) uv run python -m pdb -m src
 
 clean:
 	rm -rf __pycache__ */__pycache__ */*/__pycache__ .mypy_cache
 	rm -rf data/output
 
 lint:
-	uv run flake8 . --extend-exclude=.venv,llm_sdk
-	uv run mypy . --warn-return-any --warn-unused-ignores \
+	$(UV_ENV) uv run flake8 . --extend-exclude=.venv,llm_sdk
+	$(UV_ENV) uv run mypy . --warn-return-any --warn-unused-ignores \
 		--ignore-missing-imports --disallow-untyped-defs \
 		--check-untyped-defs
 
 lint-strict:
-	uv run flake8 . --extend-exclude=.venv,llm_sdk
-	uv run mypy . --strict
+	$(UV_ENV) uv run flake8 . --extend-exclude=.venv,llm_sdk
+	$(UV_ENV) uv run mypy . --strict
