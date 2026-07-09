@@ -124,6 +124,9 @@ class FunctionCallConstraint:
         if s == "":
             chars.add("-")
         if "." not in s and has_digit:
+            intpart = s[1:] if s.startswith("-") else s
+            if intpart == "0":
+                chars -= DIGITS
             chars.add(".")
         if self._number_complete():
             chars.add(self._number_terminator())
