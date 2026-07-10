@@ -44,6 +44,7 @@ _Snapshot = tuple[
     str,
     str,
     bool,
+    str,
 ]
 
 
@@ -75,6 +76,7 @@ class FunctionCallConstraint:
         self._name_so_far = ""
         self._key_text = ""
         self._number_so_far = ""
+        self._number_type = ""
         self._string_opened = False
 
     def _enter(self, phase: Phase) -> None:
@@ -97,14 +99,21 @@ class FunctionCallConstraint:
         return "," if self._more_params() else "}"
 
     def _number_complete(self) -> bool:
-        """Whether the number typed so far is a valid JSON number."""
+        """Whether the number typed so far is a valid JSON number.
+
+        For ``"number"`` (float) parameters, a decimal point with at
+        least one fraction digit is required, so the value always
+        parses back as a JSON float rather than an int.
+        """
         s = self._number_so_far
         body = s[1:] if s.startswith("-") else s
         if body == "":
             return False
         if "." in body:
             intpart, _, frac = body.partition(".")
-            return intpart.isdigit() and frac.isdigit()
+            return intpart.isdigit() and frac.isdigit() and frac != ""
+        if self._number_type == "number":
+            return False
         return body.isdigit()
 
     def _name_next_chars(self) -> set[str]:
@@ -127,7 +136,8 @@ class FunctionCallConstraint:
             intpart = s[1:] if s.startswith("-") else s
             if intpart == "0":
                 chars -= DIGITS
-            chars.add(".")
+            if self._number_type != "integer":
+                chars.add(".")
         if self._number_complete():
             chars.add(self._number_terminator())
         return chars
@@ -160,6 +170,7 @@ class FunctionCallConstraint:
             self._key_text,
             self._number_so_far,
             self._string_opened,
+            self._number_type,
         )
 
     def _restore(self, snap: _Snapshot) -> None:
@@ -175,6 +186,7 @@ class FunctionCallConstraint:
             self._key_text,
             self._number_so_far,
             self._string_opened,
+            self._number_type,
         ) = snap
 
     def accepts(self, text: str) -> bool:
@@ -282,9 +294,10 @@ class FunctionCallConstraint:
         self._literal_pos += 1
         if self._literal_pos >= len(self._key_text):
             ptype = self._params()[self._param_index][1]
-            if ptype == "number":
+            if ptype in ("number", "integer"):
                 self._enter(Phase.VALUE_NUMBER)
                 self._number_so_far = ""
+                self._number_type = ptype
             else:
                 self._enter(Phase.VALUE_STRING)
                 self._string_opened = False
