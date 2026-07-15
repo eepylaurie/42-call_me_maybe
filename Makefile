@@ -7,7 +7,7 @@ else
 UV_ENV :=
 endif
 
-.PHONY: install run debug clean lint lint-strict
+.PHONY: install run debug clean lint lint-strict test
 
 install:
 	$(UV_ENV) uv sync
@@ -31,3 +31,6 @@ lint:
 lint-strict:
 	$(UV_ENV) uv run flake8 . --extend-exclude=.venv,llm_sdk
 	$(UV_ENV) uv run mypy . --strict
+
+test:
+	$(UV_ENV) uv run python -m pytest tests/ -v
