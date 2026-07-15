@@ -3,4 +3,4 @@ __pycache__/
 .mypy_cache/
 .venv/
 data/output/
-*.egg-info/
+*.egg-info/.pytest_cache/

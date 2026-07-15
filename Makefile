@@ -20,6 +20,7 @@ debug:
 
 clean:
 	rm -rf __pycache__ */__pycache__ */*/__pycache__ .mypy_cache
+	rm -rf .pytest_cache
 	rm -rf data/output
 
 lint:
