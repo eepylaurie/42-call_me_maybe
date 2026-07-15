@@ -2,6 +2,8 @@
 
 # Call Me Maybe
 
+![CI](https://github.com/eepylaurie/42-call_me_maybe/actions/workflows/ci.yml/badge.svg)
+
 Introduction to function calling in LLMs.
 
 ## Description
