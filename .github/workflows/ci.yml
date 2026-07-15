@@ -9,6 +9,7 @@ on:
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -19,13 +20,15 @@ jobs:
         run: uv python install 3.11
 
       - name: Install dependencies
-        run: uv pip install --system numpy pydantic flake8 mypy pytest
+        run: |
+          uv venv
+          uv pip install numpy pydantic flake8 mypy pytest
 
       - name: Lint (flake8)
-        run: flake8 src tests --extend-exclude=.venv,llm_sdk
+        run: uv run flake8 src tests --extend-exclude=.venv,llm_sdk
 
       - name: Type-check (mypy)
-        run: mypy src tests --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
+        run: uv run mypy src tests --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
 
       - name: Test (pytest)
-        run: PYTHONPATH=. pytest tests/ -v
+        run: uv run pytest tests/ -v
