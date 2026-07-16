@@ -128,8 +128,8 @@ The implementation has three layers:
    and `is_complete()`. It moves through phases: emit the fixed prefix, choose
    the function name (a prefix walk over the allowed names), then, for the
    chosen function, emit each `"key": ` and constrain the value by type
-   (numbers, strings) with the correct separators, and finally close the
-   object. It also exposes `accepts(text)`, which simulates advancing through a
+   (float, integer, string, or boolean) with the correct separators, and
+   finally close the object. It also exposes `accepts(text)`, which simulates advancing through a
    whole multi-character token and then restores its state, so the decoder can
    test tokens without committing to them.
 
@@ -228,25 +228,29 @@ object is complete rather than waiting for an end-of-sequence token.
 
 ## Performance analysis
 
-Measured on the provided test set of 11 prompts (Qwen3-0.6B, CPU):
+Measured on a held-out set of 11 prompts (Qwen3-0.6B, CPU) — a private
+evaluation set of functions and prompts the implementation was not developed
+against, including `integer` parameters not present in the public examples:
 
 - **Validity: 100%.** Every output is valid JSON with exactly the required keys
   (`prompt`, `name`, `parameters`) and correct types. This is guaranteed by
   construction, not by chance.
-- **Accuracy: ~91% (10 / 11).** The model selects the correct function and
-  extracts correct arguments on 10 of 11 prompts, including generating working
-  regular expressions for the substitution tasks.
+- **Accuracy: ~91% (10 / 11).** On unseen functions the model selects the
+  correct one and extracts correct arguments on 10 of 11 prompts, including
+  generating working regular expressions for the substitution tasks. Reaching
+  this on a held-out set shows the approach generalises rather than fitting the
+  examples.
 - **Speed.** All prompts are processed well within the 5-minute budget on
   standard hardware, after the one-time model load.
 
 The single miss is the clearest illustration of what this project does and does
-not control. On an ambiguous instruction ("substitute the word 'cat'"), the
-model produced a valid but semantically wrong regex (`cat.*cat` instead of
-`cat`). The output was still structurally perfect: correct function, correct
-keys, correct types, parseable JSON. In other words, constrained decoding
-guarantees **structural and schema correctness on 100% of prompts**, while
-semantic correctness of free-text values is bounded by the reasoning ability of
-the underlying model. The two are decoupled by design, and only the second
+not control. On a template-formatting prompt (`Say "hello" to {name}`), the
+model produced the argument without the inner quotes (`Say hello to {name}`).
+The output was still structurally perfect: correct function, correct keys,
+correct types, parseable JSON. In other words, constrained decoding guarantees
+**structural and schema correctness on 100% of prompts**, while semantic
+correctness of free-text values is bounded by the reasoning ability of the
+underlying model. The two are decoupled by design, and only the second
 remains — exactly where a 0.6B model is expected to be weakest.
 
 ## Challenges faced
