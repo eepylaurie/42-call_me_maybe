@@ -271,6 +271,11 @@ class FunctionCallConstraint:
         """
         return self._phase is Phase.DONE
 
+    @property
+    def phase(self) -> Phase:
+        """The current phase (read-only, for introspection)."""
+        return self._phase
+
     def _advance_literal(self) -> None:
         """Move the cursor within a fixed literal and transition."""
         self._literal_pos += 1

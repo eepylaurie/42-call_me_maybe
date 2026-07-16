@@ -42,4 +42,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_OUTPUT,
         help="Path to write the results JSON file.",
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print the constrained-decoding trace to stderr.",
+    )
     return parser.parse_args(argv)

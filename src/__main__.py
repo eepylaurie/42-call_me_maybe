@@ -5,6 +5,7 @@ import sys
 import time
 from typing import Any
 from .cli import parse_args
+from .decoder import StepFn
 from .io_utils import (
     InputError,
     load_function_definitions,
@@ -46,13 +47,32 @@ def main(argv: list[str] | None = None) -> int:
         f"Model loaded in {time.perf_counter() - load_start:.1f}s", flush=True
     )
 
+    def make_printer() -> StepFn:
+        def printer(
+            step: int,
+            phase: str,
+            legal: int,
+            vocab: int,
+            chose: str,
+            sofar: str,
+        ) -> None:
+            print(
+                f"  step {step:>3} | {phase:<12} | "
+                f"legal {legal:>4}/{vocab} | chose {chose!r}",
+                file=sys.stderr,
+            )
+
+        return printer
+
+    on_step = make_printer() if args.verbose else None
+
     total = len(prompts)
     results: list[dict[str, Any]] = []
     for i, entry in enumerate(prompts, start=1):
         step_start = time.perf_counter()
         print(f"[{i}/{total}] {entry.prompt!r} ... ", end="", flush=True)
         try:
-            call = pipeline.run(entry.prompt)
+            call = pipeline.run(entry.prompt, on_step=on_step)
             results.append(call.model_dump())
             elapsed = time.perf_counter() - step_start
             print(f"-> {call.name} ({elapsed:.1f}s)", flush=True)

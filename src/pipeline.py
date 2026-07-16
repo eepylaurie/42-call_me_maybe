@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from llm_sdk import Small_LLM_Model  # type: ignore
-from .decoder import ConstrainedDecoder
+from .decoder import ConstrainedDecoder, StepFn
 from .models import FunctionCall, FunctionDefinition
 from .vocabulary import Vocabulary
 
@@ -51,17 +51,18 @@ class Pipeline:
         """Return next-token logits for a token-id context."""
         return list(self._model.get_logits_from_input_ids(ids))
 
-    def run(self, prompt: str) -> FunctionCall:
+    def run(self, prompt: str, on_step: StepFn | None = None) -> FunctionCall:
         """Generate the function call for one prompt.
 
         Args:
             prompt: The natural-language request.
+            on_step: Optional per-token trace callback.
 
         Returns:
             A schema-valid :class:`FunctionCall`.
         """
         text = build_prompt(prompt, self._functions)
-        raw = self._decoder.decode(text)
+        raw = self._decoder.decode(text, on_step=on_step)
         data = json.loads(raw)
         return FunctionCall(
             prompt=prompt, name=data["name"], parameters=data["parameters"]

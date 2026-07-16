@@ -9,6 +9,7 @@ from .vocabulary import Vocabulary
 
 LogitsFn = Callable[[list[int]], Sequence[float]]
 EncodeFn = Callable[[str], list[int]]
+StepFn = Callable[[int, str, int, int, str, str], None]
 
 
 class DecodingError(Exception):
@@ -65,11 +66,13 @@ class ConstrainedDecoder:
         masked[idx] = arr[idx]
         return int(np.argmax(masked))
 
-    def decode(self, prompt: str) -> str:
+    def decode(self, prompt: str, on_step: StepFn | None = None) -> str:
         """Generate the JSON function call for a prompt.
 
         Args:
             prompt: The full prompt text to seed the model.
+            on_step: Optional per-token callback with
+                (step, phase, num_legal, vocab_size, chosen, output).
 
         Returns:
             A complete, schema-valid JSON string.
@@ -96,4 +99,13 @@ class ConstrainedDecoder:
                 constraint.advance(ch)
             generated += text
             input_ids.append(best)
+            if on_step is not None:
+                on_step(
+                    steps,
+                    constraint.phase.name,
+                    len(legal),
+                    len(self._id_to_text),
+                    text,
+                    generated,
+                )
         return generated
