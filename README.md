@@ -53,6 +53,10 @@ By default the program reads from `data/input/` and writes to
 `data/output/function_calling_results.json` (the output directory is created
 automatically and is not committed).
 
+Pass `--verbose` to print the constrained-decoding trace to `stderr` (see
+[Watching it work](#watching-it-work) below). The generated output file is
+unchanged.
+
 > **Note for 42 machines:** the CUDA build of `torch` is large, and the home
 > quota is limited. The `Makefile` therefore routes uv's cache, the model
 > cache, and the virtual environment to `goinfre` automatically when it is
@@ -167,6 +171,36 @@ What is the sum of 265 and 345?
   }
 }
 ```
+
+### Watching it work
+
+Run any prompt with `--verbose` to watch the constraint machine in action. At
+each generation step, the program prints the current decoding phase, how many
+of the ~151k vocabulary tokens remain legal, and which token the model
+ultimately selects:
+
+```
+step  1 | PREFIX       | legal    2/151643 | chose '{"'
+step  6 | NAME         | legal   16/151643 | chose '_add'
+step 10 | AFTER_NAME   | legal    7/151643 | chose 'parameters'
+step 16 | VALUE_NUMBER | legal   11/151643 | chose '2'
+step 17 | VALUE_NUMBER | legal   11/151643 | chose '.'
+step 18 | VALUE_NUMBER | legal   10/151643 | chose '0'
+step 19 | SEPARATOR    | legal   11/151643 | chose ','
+step 27 | DONE         | legal   12/151643 | chose '}}'
+```
+
+At most positions, only a handful of tokens (out of 151,643) keep the output
+on a valid path **(often just one or two)**. That dramatic reduction is the essence
+of constrained decoding: the model still decides which function to call and
+which values to generate, but every available choice is guaranteed to preserve
+a valid JSON structure.
+
+The trace also highlights two implementation details. First, numeric values are
+emitted according to the schema one token at a time (for example, `2`, then
+`.`, then `0` for the float `2.0`), allowing the constraint machine to validate
+each character as it is produced. Second, generation stops as soon as the JSON
+object is complete rather than waiting for an end-of-sequence token.
 
 ## Design decisions
 
