@@ -14,6 +14,7 @@ class Phase(Enum):
     PARAM_KEY = auto()
     VALUE_NUMBER = auto()
     VALUE_STRING = auto()
+    VALUE_BOOLEAN = auto()
     SEPARATOR = auto()
     SUFFIX = auto()
     DONE = auto()
@@ -33,6 +34,7 @@ _LITERALS = {
 
 DIGITS = set("0123456789")
 PRINTABLE = frozenset(chr(c) for c in range(0x20, 0x7F))
+BOOLEANS = ("true", "false")
 _Snapshot = tuple[
     Phase,
     str,
@@ -44,6 +46,7 @@ _Snapshot = tuple[
     str,
     str,
     bool,
+    str,
     str,
 ]
 
@@ -78,6 +81,7 @@ class FunctionCallConstraint:
         self._number_so_far = ""
         self._number_type = ""
         self._string_opened = False
+        self._bool_so_far = ""
 
     def _enter(self, phase: Phase) -> None:
         """Move to a new phase and reset the per-literal cursor."""
@@ -95,7 +99,7 @@ class FunctionCallConstraint:
         return self._param_index < len(self._params()) - 1
 
     def _number_terminator(self) -> str:
-        """The char that ends the current number value."""
+        """The char that ends the current value (',' or '}')."""
         return "," if self._more_params() else "}"
 
     def _number_complete(self) -> bool:
@@ -142,6 +146,17 @@ class FunctionCallConstraint:
             chars.add(self._number_terminator())
         return chars
 
+    def _boolean_next_chars(self) -> set[str]:
+        """Return chars continuing 'true'/'false', or the terminator."""
+        pos = len(self._bool_so_far)
+        chars: set[str] = set()
+        for word in BOOLEANS:
+            if word.startswith(self._bool_so_far) and len(word) > pos:
+                chars.add(word[pos])
+        if self._bool_so_far in BOOLEANS:
+            chars.add(self._number_terminator())
+        return chars
+
     def _string_next_chars(self) -> set[str]:
         """Return chars legal at the current point of a string value."""
         if not self._string_opened:
@@ -171,6 +186,7 @@ class FunctionCallConstraint:
             self._number_so_far,
             self._string_opened,
             self._number_type,
+            self._bool_so_far,
         )
 
     def _restore(self, snap: _Snapshot) -> None:
@@ -187,6 +203,7 @@ class FunctionCallConstraint:
             self._number_so_far,
             self._string_opened,
             self._number_type,
+            self._bool_so_far,
         ) = snap
 
     def accepts(self, text: str) -> bool:
@@ -232,6 +249,8 @@ class FunctionCallConstraint:
             return self._number_next_chars()
         if self._phase is Phase.VALUE_STRING:
             return self._string_next_chars()
+        if self._phase is Phase.VALUE_BOOLEAN:
+            return self._boolean_next_chars()
         return set()
 
     def advance(self, char: str) -> None:
@@ -262,6 +281,8 @@ class FunctionCallConstraint:
             self._advance_number(char)
         elif self._phase is Phase.VALUE_STRING:
             self._advance_string(char)
+        elif self._phase is Phase.VALUE_BOOLEAN:
+            self._advance_boolean(char)
 
     def is_complete(self) -> bool:
         """Return whether a full, valid function call has been emitted.
@@ -303,6 +324,9 @@ class FunctionCallConstraint:
                 self._enter(Phase.VALUE_NUMBER)
                 self._number_so_far = ""
                 self._number_type = ptype
+            elif ptype == "boolean":
+                self._enter(Phase.VALUE_BOOLEAN)
+                self._bool_so_far = ""
             else:
                 self._enter(Phase.VALUE_STRING)
                 self._string_opened = False
@@ -321,6 +345,25 @@ class FunctionCallConstraint:
             self._output += char
             return
         self._number_so_far = ""
+        if self._more_params():
+            self._enter(Phase.SEPARATOR)
+        else:
+            self._enter(Phase.SUFFIX)
+        self.advance(char)
+
+    def _advance_boolean(self, char: str) -> None:
+        """Build 'true'/'false', or finish it on the terminator.
+
+        Like a number, a boolean literal has no closing delimiter, so
+        once the word is complete ``allowed_next`` offers the terminator
+        (',' or '}'). When that terminator is chosen we clear the word
+        and re-dispatch the character into the following literal.
+        """
+        if self._bool_so_far not in BOOLEANS or char not in (",", "}"):
+            self._bool_so_far += char
+            self._output += char
+            return
+        self._bool_so_far = ""
         if self._more_params():
             self._enter(Phase.SEPARATOR)
         else:

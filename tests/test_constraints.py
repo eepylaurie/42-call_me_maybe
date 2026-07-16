@@ -109,3 +109,29 @@ def test_accepts_does_not_mutate_state() -> None:
 
 def test_accepts_rejects_empty_string() -> None:
     assert FunctionCallConstraint(make_functions()).accepts("") is False
+
+
+def test_boolean_parameter() -> None:
+    fns = [
+        FunctionDefinition(
+            name="fn_set_flag",
+            parameters={"enabled": ParameterSpec(type="boolean")},
+        )
+    ]
+    out = drive(
+        fns, '{"name": "fn_set_flag", "parameters": {"enabled": true}}'
+    )
+    assert out.is_complete()
+    assert json.loads(out._output)["parameters"] == {"enabled": True}
+
+
+def test_boolean_rejects_partial_word() -> None:
+    fns = [
+        FunctionDefinition(
+            name="fn_set_flag",
+            parameters={"enabled": ParameterSpec(type="boolean")},
+        )
+    ]
+    assert rejects(
+        fns, '{"name": "fn_set_flag", "parameters": {"enabled": tru}'
+    )
