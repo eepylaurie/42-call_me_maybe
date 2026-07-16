@@ -14,6 +14,31 @@ from .io_utils import (
 )
 from .pipeline import Pipeline
 
+_TTY = sys.stderr.isatty()
+
+
+def _ansi(code: str) -> str:
+    """Return an ANSI code only when stderr is a real terminal."""
+    return code if _TTY else ""
+
+
+_DIM = _ansi("\033[2m")
+_BOLD = _ansi("\033[1m")
+_CYAN = _ansi("\033[36m")
+_GREEN = _ansi("\033[32m")
+_YELLOW = _ansi("\033[33m")
+_MAGENTA = _ansi("\033[35m")
+_RESET = _ansi("\033[0m")
+
+_PHASE_COLOR = {
+    "NAME": _CYAN,
+    "PARAM_KEY": _YELLOW,
+    "VALUE_NUMBER": _GREEN,
+    "VALUE_STRING": _GREEN,
+    "VALUE_BOOLEAN": _GREEN,
+    "DONE": _MAGENTA,
+}
+
 
 def main(argv: list[str] | None = None) -> int:
     """Run the full read -> generate -> write pipeline.
@@ -56,9 +81,13 @@ def main(argv: list[str] | None = None) -> int:
             chose: str,
             sofar: str,
         ) -> None:
+            color = _PHASE_COLOR.get(phase, _DIM)
+            bar = "\u258f" * min(legal, 20)
             print(
-                f"  step {step:>3} | {phase:<12} | "
-                f"legal {legal:>4}/{vocab} | chose {chose!r}",
+                f"  {step:>3}  {color}{phase:<13}{_RESET} "
+                f"{_DIM}{legal:>3}/{vocab}{_RESET} "
+                f"{_DIM}{bar:<20}{_RESET} "
+                f"{_BOLD}{chose!r}{_RESET}",
                 file=sys.stderr,
             )
 
@@ -70,12 +99,32 @@ def main(argv: list[str] | None = None) -> int:
     results: list[dict[str, Any]] = []
     for i, entry in enumerate(prompts, start=1):
         step_start = time.perf_counter()
-        print(f"[{i}/{total}] {entry.prompt!r} ... ", end="", flush=True)
+        if args.verbose:
+            line = "\u2500" * 60
+            print(
+                f"\n{_DIM}{line}{_RESET}\n"
+                f"{_BOLD}[{i}/{total}]{_RESET} {entry.prompt}\n"
+                f"{_DIM}{line}{_RESET}",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"[{i}/{total}] {entry.prompt!r} ... ",
+                end="",
+                flush=True,
+            )
         try:
             call = pipeline.run(entry.prompt, on_step=on_step)
             results.append(call.model_dump())
             elapsed = time.perf_counter() - step_start
-            print(f"-> {call.name} ({elapsed:.1f}s)", flush=True)
+            if args.verbose:
+                print(
+                    f"  {_GREEN}\u2713{_RESET} {_BOLD}{call.name}{_RESET} "
+                    f"{_DIM}({elapsed:.1f}s){_RESET}",
+                    file=sys.stderr,
+                )
+            else:
+                print(f"-> {call.name} ({elapsed:.1f}s)", flush=True)
         except Exception as exc:
             elapsed = time.perf_counter() - step_start
             print(f"failed ({elapsed:.1f}s)", flush=True)
@@ -84,7 +133,6 @@ def main(argv: list[str] | None = None) -> int:
                 f"{entry.prompt!r}: {exc}",
                 file=sys.stderr,
             )
-
     try:
         write_json(args.output, results)
     except InputError as exc:
